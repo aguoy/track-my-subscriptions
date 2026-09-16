@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -42,6 +43,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const settings = useQuery(api.subscriptions.settings);
   const setBaseCurrency = useMutation(api.subscriptions.setBaseCurrency);
+  const initializeUser = useMutation(api.subscriptions.initializeUser);
+
+  // One-time, idempotent initialization (settings row + sample data) for the
+  // signed-in user. Runs at most once per session thanks to the ref guard;
+  // the mutation itself is a no-op if the user was already initialized.
+  const initRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user?._id) return;
+    if (initRef.current === user._id) return;
+    initRef.current = user._id;
+    initializeUser().catch((err) => {
+      initRef.current = null;
+      console.warn("[init] user initialization failed:", err);
+    });
+  }, [user?._id, initializeUser]);
 
   const handleSignOut = async () => {
     await signOut();

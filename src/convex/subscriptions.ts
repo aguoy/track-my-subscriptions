@@ -42,30 +42,64 @@ async function requireUserId(ctx: any) {
   return userId;
 }
 
-/** Pull the user's settings row (creating a default one if needed). */
-async function getSettings(ctx: any, userId: any) {
-  let settings = await ctx.db
+// ---------- settings helpers ----------
+//
+// Queries must be strictly read-only, so settings access is split:
+//   - readSettingsRow / getSettingsReadOnly: READ path (safe in queries).
+//     If no row exists yet we return sensible defaults IN MEMORY and write
+//     nothing.
+//   - getOrCreateSettings: WRITE path (mutations only). Creates the row if
+//     missing. Idempotent thanks to the unique by_user lookup.
+
+type SettingsRow = { _id: any; userId: any; baseCurrency?: string; rates?: Record<string, number>; seeded?: boolean } | null;
+
+type SettingsView = {
+  _id?: string;
+  baseCurrency: string;
+  rates: Record<string, number>;
+  seeded: boolean;
+};
+
+const DEFAULTS: SettingsView = {
+  baseCurrency: "NZD",
+  rates: {},
+  seeded: false,
+};
+
+/** READ path: fetch the raw settings row without creating it. */
+async function readSettingsRow(ctx: any, userId: any): Promise<SettingsRow> {
+  return await ctx.db
     .query("userSettings")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .unique();
-  if (!settings) {
-    const id = await ctx.db.insert("userSettings", {
-      userId,
-      baseCurrency: "NZD",
-      rates: {},
-      seeded: false,
-    });
-    settings = await ctx.db.get(id);
-  }
-  return settings;
 }
 
-async function ensureSeeded(ctx: any, userId: any) {
-  const settings = await getSettings(ctx, userId);
-  if (!settings?.seeded) {
-    await seedForUser(ctx, userId);
-    await ctx.db.patch(settings._id, { seeded: true });
-  }
+/** READ path for queries: existing row, or in-memory defaults. No writes. */
+async function getSettingsReadOnly(
+  ctx: any,
+  userId: any,
+): Promise<SettingsView> {
+  const row = await readSettingsRow(ctx, userId);
+  if (!row) return { ...DEFAULTS };
+  return {
+    _id: row._id,
+    baseCurrency: row.baseCurrency ?? DEFAULTS.baseCurrency,
+    rates: row.rates ?? {},
+    seeded: row.seeded ?? false,
+  };
+}
+
+/** WRITE path (mutations only): fetch the row, inserting defaults if absent. */
+async function getOrCreateSettings(ctx: any, userId: any) {
+  const row = await readSettingsRow(ctx, userId);
+  if (row) return row;
+  const id = await ctx.db.insert("userSettings", {
+    userId,
+    baseCurrency: DEFAULTS.baseCurrency,
+    rates: {},
+    seeded: false,
+  });
+  return await ctx.db.get(id);
 }
 
 /** Shift a yyyy-mm-dd so it lands `offsetDays` from today (keeps the demo current). */
@@ -234,7 +268,6 @@ export const list = query({
   args: { includeCancelled: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    await ensureSeeded(ctx, userId);
     const subs = await ctx.db
       .query("subscriptions")
       .withIndex("by_user", (q: any) => q.eq("userId", userId))
@@ -274,7 +307,8 @@ export const settings = query({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUserId(ctx);
-    return await getSettings(ctx, userId);
+    // Strictly read-only: returns in-memory defaults if no row exists yet.
+    return await getSettingsReadOnly(ctx, userId);
   },
 });
 
@@ -282,8 +316,7 @@ export const dashboard = query({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUserId(ctx);
-    await ensureSeeded(ctx, userId);
-    const settingsRow = await getSettings(ctx, userId);
+    const settingsRow = await getSettingsReadOnly(ctx, userId);
     const base = settingsRow?.baseCurrency ?? "NZD";
     const rates: Record<string, number> = settingsRow?.rates ?? {};
 
@@ -491,7 +524,6 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    await ensureSeeded(ctx, userId);
     return await ctx.db.insert("subscriptions", { userId, ...args });
   },
 });
@@ -587,11 +619,42 @@ export const markUsed = mutation({
   },
 });
 
+/**
+ * Idempotent one-time initialization for a signed-in user.
+ *
+ * Creates their settings row (if missing) and seeds the sample
+ * subscriptions exactly once. Safe to call any number of times from any
+ * client — repeat calls are no-ops thanks to the settings row check.
+ */
+export const initializeUser = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUserId(ctx);
+    const settings = await getOrCreateSettings(ctx, userId);
+    if (settings.seeded) return { seeded: false };
+
+    // Double safety: never seed on top of existing data, so duplicate
+    // samples are impossible even if the flag were ever lost.
+    const existing = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .first();
+    if (existing) {
+      await ctx.db.patch(settings._id, { seeded: true });
+      return { seeded: false };
+    }
+
+    await seedForUser(ctx, userId);
+    await ctx.db.patch(settings._id, { seeded: true });
+    return { seeded: true }; // seeded this time
+  },
+});
+
 export const setBaseCurrency = mutation({
   args: { currency: currencyArg },
   handler: async (ctx, { currency }) => {
     const userId = await requireUserId(ctx);
-    const settings = await getSettings(ctx, userId);
+    const settings = await getOrCreateSettings(ctx, userId);
     await ctx.db.patch(settings._id, { baseCurrency: currency });
   },
 });
@@ -606,7 +669,7 @@ export const setRates = mutation({
   },
   handler: async (ctx, rates) => {
     const userId = await requireUserId(ctx);
-    const settings = await getSettings(ctx, userId);
+    const settings = await getOrCreateSettings(ctx, userId);
     const cleaned = Object.fromEntries(
       Object.entries(rates).filter(([, r]) => typeof r === "number" && r > 0),
     );
@@ -632,7 +695,7 @@ export const resetDemo = mutation({
       for (const l of logs) await ctx.db.delete(l._id);
       await ctx.db.delete(s._id);
     }
-    const settings = await getSettings(ctx, userId);
+    const settings = await getOrCreateSettings(ctx, userId);
     await seedForUser(ctx, userId);
     await ctx.db.patch(settings._id, { seeded: true });
   },

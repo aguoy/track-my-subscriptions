@@ -12,6 +12,10 @@ import "./index.css";
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
+const Subscriptions = lazy(() => import("./pages/Subscriptions.tsx"));
+const SubscriptionDetail = lazy(() => import("./pages/SubscriptionDetail.tsx"));
+const YearComparison = lazy(() => import("./pages/YearComparison.tsx"));
+const Manage = lazy(() => import("./pages/Manage.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -128,6 +132,38 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <Dashboard />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/subscriptions"
+                element={
+                  <RequireAuth>
+                    <Subscriptions />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/subscriptions/:id"
+                element={
+                  <RequireAuth>
+                    <SubscriptionDetail />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/year"
+                element={
+                  <RequireAuth>
+                    <YearComparison />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/manage"
+                element={
+                  <RequireAuth>
+                    <Manage />
                   </RequireAuth>
                 }
               />

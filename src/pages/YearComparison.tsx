@@ -2,12 +2,8 @@ import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
-import {
-  formatMoney,
-  monthlyEquivalent,
-  type RateTable,
-  type Subscription,
-} from "@/lib/subs";
+import { monthlyEquivalent, type RateTable, type Subscription } from "@/lib/subs";
+import { useI18n } from "@/lib/i18n";
 import { useQuery } from "convex/react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { useMemo } from "react";
@@ -34,6 +30,7 @@ function monthsActiveIn(s: Subscription, year: number): number {
 }
 
 export default function YearComparison() {
+  const { t, formatMoney, formatNumber } = useI18n();
   const subs = useQuery(api.subscriptions.list, { includeCancelled: true });
   const settings = useQuery(api.subscriptions.settings);
 
@@ -58,7 +55,11 @@ export default function YearComparison() {
       .sort((a, b) => a[0] - b[0])
       .map(([year, total]) => {
         const prev = map.get(year - 1);
-        return { year: String(year), total, growth: prev ? total / prev - 1 : null };
+        return {
+          year: String(year),
+          total,
+          growth: prev ? total / prev - 1 : null,
+        };
       });
   }, [subs, rates, base]);
 
@@ -82,16 +83,16 @@ export default function YearComparison() {
     <AppShell>
       <div className="grid gap-5">
         <header>
-          <h1 className="text-2xl font-semibold tracking-tight">Yearly comparison</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("year.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            How your recurring spend has moved over time, in {base}.
+            {t("year.subtitle", base)}
           </p>
         </header>
 
         {activeYears.length === 0 ? (
           <Card className="card-quiet">
             <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              Add subscriptions to see your yearly totals here.
+              {t("year.empty")}
             </CardContent>
           </Card>
         ) : (
@@ -106,7 +107,7 @@ export default function YearComparison() {
                     <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">
                       {formatMoney(last.total, base)}
                       <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        vs {formatMoney(prev.total, base)}
+                        {t("year.vsLast", last.year, formatMoney(prev.total, base))}
                       </span>
                     </p>
                   </div>
@@ -124,10 +125,14 @@ export default function YearComparison() {
                       <TrendingUp className="size-4" />
                     )}
                     {last.total === prev.total
-                      ? "No change"
-                      : `${last.total > prev.total ? "+" : ""}${(
-                          (last.total / prev.total - 1) * 100
-                        ).toFixed(1)}% vs last year`}
+                      ? t("year.noChange")
+                      : t(
+                          "year.vsPrevPct",
+                          formatNumber(
+                            Math.abs((last.total / prev.total - 1) * 100),
+                            { maximumFractionDigits: 1 },
+                          ),
+                        )}
                   </div>
                 </CardContent>
               </Card>
@@ -135,7 +140,7 @@ export default function YearComparison() {
 
             <Card className="card-quiet">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Spend by year</CardTitle>
+                <CardTitle className="text-base">{t("year.spendByYear")}</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4">
                 {activeYears.map((y) => (
@@ -143,19 +148,22 @@ export default function YearComparison() {
                     <div className="flex items-baseline justify-between gap-3 text-sm">
                       <span className="font-medium">
                         {y.year}
-                        {y.growth !== null && (
+                        {y.growth !== null && y.growth !== 0 && (
                           <span
                             className={cn(
                               "ml-2 text-xs font-medium",
                               y.growth > 0
                                 ? "text-rose-600 dark:text-rose-400"
-                                : y.growth < 0
-                                  ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-muted-foreground",
+                                : "text-emerald-600 dark:text-emerald-400",
                             )}
                           >
-                            {y.growth > 0 ? "+" : ""}
-                            {(y.growth * 100).toFixed(0)}% vs previous
+                            {y.growth > 0 ? "▲" : "▼"}{" "}
+                            {t(
+                              "year.vsPrevPct",
+                              formatNumber(Math.abs(y.growth * 100), {
+                                maximumFractionDigits: 0,
+                              }),
+                            )}
                           </span>
                         )}
                       </span>

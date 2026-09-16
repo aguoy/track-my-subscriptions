@@ -1,4 +1,4 @@
-import { AppShell, Brand } from "@/components/AppShell";
+import { AppShell } from "@/components/AppShell";
 import SubscriptionFormDialog from "@/components/SubscriptionFormDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,19 +20,12 @@ import {
   CATEGORY_TINTS,
   daysSince,
   daysUntil,
-  formatDate,
-  formatMoney,
   monthlyEquivalent,
   type RateTable,
 } from "@/lib/subs";
+import { useI18n } from "@/lib/i18n";
 import { useMutation, useQuery } from "convex/react";
-import {
-  ArrowLeft,
-  CalendarClock,
-  Check,
-  Pencil,
-  Undo2,
-} from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, Pencil, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -52,6 +45,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function SubscriptionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t, formatDate, formatMoney } = useI18n();
   const sub = useQuery(api.subscriptions.get, { id: id as never });
   const settings = useQuery(api.subscriptions.settings);
   const markUsed = useMutation(api.subscriptions.markUsed);
@@ -80,12 +74,10 @@ export default function SubscriptionDetail() {
     return (
       <AppShell>
         <div className="flex flex-col items-center gap-3 py-20 text-center">
-          <p className="text-lg font-semibold">Subscription not found</p>
-          <p className="text-sm text-muted-foreground">
-            It may have been removed, or the link is out of date.
-          </p>
+          <p className="text-lg font-semibold">{t("detail.notFound")}</p>
+          <p className="text-sm text-muted-foreground">{t("detail.notFoundBody")}</p>
           <Button variant="outline" onClick={() => navigate("/subscriptions")}>
-            Back to subscriptions
+            {t("detail.backToSubs")}
           </Button>
         </div>
       </AppShell>
@@ -109,7 +101,7 @@ export default function SubscriptionDetail() {
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
-            All subscriptions
+            {t("detail.backToAll")}
           </Link>
         </div>
 
@@ -126,36 +118,46 @@ export default function SubscriptionDetail() {
                 >
                   {CATEGORY_ICONS[sub.category]}
                 </span>
-                <div>
+                <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-xl font-semibold tracking-tight">{sub.name}</h1>
                     {sub.cancelledAt ? (
-                      <Badge variant="outline">Cancelled</Badge>
+                      <Badge variant="outline">{t("common.cancelled")}</Badge>
                     ) : sub.autoRenew ? (
-                      <Badge variant="secondary">Auto-renews</Badge>
+                      <Badge variant="secondary">{t("detail.autoRenews")}</Badge>
                     ) : (
-                      <Badge variant="secondary">Manual renewal</Badge>
+                      <Badge variant="secondary">{t("detail.manualRenewal")}</Badge>
                     )}
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">{sub.category}</p>
+    </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t(`cat.${sub.category}`)}
+                </p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-semibold tracking-tight tabular-nums">
                   {formatMoney(monthly, base)}
-                  <span className="text-sm font-normal text-muted-foreground">/mo</span>
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {t("common.perMonthShort")}
+                  </span>
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {formatMoney(monthly * 12, base)}/yr in {base}
+                  {formatMoney(monthly * 12, base)}
+                  {t("common.perYear")} · {base}
                 </p>
               </div>
             </div>
 
             {!sub.cancelledAt && (
               <div className="mt-5 flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditing(true)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setEditing(true)}
+                >
                   <Pencil className="size-3.5" />
-                  Edit
+                  {t("common.edit")}
                 </Button>
                 <Button
                   variant="outline"
@@ -163,12 +165,12 @@ export default function SubscriptionDetail() {
                   className="gap-1.5"
                   onClick={() =>
                     markUsed({ id: sub._id }).then(() =>
-                      toast.success(`Marked ${sub.name} as used today`),
+                      toast.success(t("subs.markedUsed", sub.name)),
                     )
                   }
                 >
                   <Check className="size-3.5" />
-                  Used today
+                  {t("detail.usedToday")}
                 </Button>
                 {sub.cancelledAt ? (
                   <Button
@@ -177,12 +179,12 @@ export default function SubscriptionDetail() {
                     className="gap-1.5"
                     onClick={() =>
                       restoreSub({ id: sub._id }).then(() =>
-                        toast.success(`${sub.name} restored`),
+                        toast.success(t("subs.restored", sub.name)),
                       )
                     }
                   >
                     <Undo2 className="size-3.5" />
-                    Restore
+                    {t("subs.restore")}
                   </Button>
                 ) : (
                   <Button
@@ -191,7 +193,7 @@ export default function SubscriptionDetail() {
                     className="gap-1.5 text-destructive hover:text-destructive"
                     onClick={() => setCancelOpen(true)}
                   >
-                    Cancel subscription
+                    {t("detail.cancelSubscription")}
                   </Button>
                 )}
               </div>
@@ -199,41 +201,49 @@ export default function SubscriptionDetail() {
           </CardContent>
         </Card>
 
-        {/* Details */}
+        {/* Details card */}
         <Card className="card-quiet">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Details</CardTitle>
+            <CardTitle className="text-base">{t("detail.details")}</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-3">
-            <Field label="Price">
-              {formatMoney(sub.price, sub.currency)} per{" "}
-              {sub.cycle === "monthly" ? "month" : "year"}
+            <Field label={t("detail.price")}>
+              {formatMoney(sub.price, sub.currency)} /{" "}
+              {t(sub.cycle === "monthly" ? "common.month" : "common.year")}
             </Field>
-            <Field label="Bills every">
-              {sub.billingCycle === "monthly" ? "Month" : "Year"}
+            <Field label={t("detail.billsEvery")}>
+              {t(sub.billingCycle === "monthly" ? "cycle.monthly" : "cycle.annual")}
             </Field>
-            <Field label="Next billing">
-              <span className="inline-flex items-center gap-1.5">
+            <Field label={t("detail.nextBilling")}>
+              <span className="inline-flex flex-wrap items-center gap-1.5">
                 <CalendarClock className="size-3.5 text-muted-foreground" />
                 {formatDate(sub.nextBillingDate)}
                 {!sub.cancelledAt && due >= 0 && (
                   <span className="text-muted-foreground">
-                    · {due === 0 ? "today" : due === 1 ? "tomorrow" : `in ${due} days`}
+                    ·{" "}
+                    {due === 0
+                      ? t("common.today")
+                      : due === 1
+                        ? t("common.tomorrow")
+                        : t("common.inDays", due)}
                   </span>
                 )}
               </span>
             </Field>
-            <Field label="Payment method">{sub.paymentMethod ?? "—"}</Field>
-            <Field label="Start date">{formatDate(sub.startDate)}</Field>
-            <Field label="Auto renewal">{sub.autoRenew ? "On" : "Off"}</Field>
+            <Field label={t("detail.paymentMethod")}>{sub.paymentMethod ?? "—"}</Field>
+            <Field label={t("detail.startDate")}>{formatDate(sub.startDate)}</Field>
+            <Field label={t("detail.autoRenewal")}>
+              {sub.autoRenew ? t("detail.on") : t("detail.off")}
+            </Field>
             {sub.customRate ? (
-              <Field label="Exchange rate override">
-                1 {sub.currency} = {sub.customRate} {base}
+              <Field label={t("detail.rateOverride")}>
+                {t("detail.perUnit", sub.currency)} {t("detail.usesRate", sub.customRate)}{" "}
+                {base}
               </Field>
             ) : null}
             {sub.notes && (
               <div className="col-span-2 lg:col-span-3">
-                <Field label="Notes">{sub.notes}</Field>
+                <Field label={t("detail.notes")}>{sub.notes}</Field>
               </div>
             )}
           </CardContent>
@@ -242,12 +252,16 @@ export default function SubscriptionDetail() {
         {/* Should I keep this? */}
         <Card className="card-quiet">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Should I keep this?</CardTitle>
+            <CardTitle className="text-base">{t("form.reviewTitle")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
-              <Field label="How often used">{sub.reviewUsageFrequency ?? "Not set"}</Field>
-              <Field label="Personal value">
+              <Field label={t("form.howOftenUsed")}>
+                {sub.reviewUsageFrequency
+                  ? t(`usage.${sub.reviewUsageFrequency}`)
+                  : t("common.notSet")}
+              </Field>
+              <Field label={t("form.personalValue")}>
                 {sub.reviewPersonalValue ? (
                   <Badge
                     variant="secondary"
@@ -260,26 +274,30 @@ export default function SubscriptionDetail() {
                         "bg-rose-500/10 text-rose-700 dark:text-rose-400",
                     )}
                   >
-                    {sub.reviewPersonalValue}
+                    {t(`value.${sub.reviewPersonalValue}`)}
                   </Badge>
                 ) : (
-                  "Not set"
+                  t("common.notSet")
                 )}
               </Field>
-              <Field label="Last used">
-                {lastUsed ? formatDate(lastUsed) : "Not set"}
+              <Field label={t("form.lastUsedDate")}>
+                {lastUsed ? formatDate(lastUsed) : t("common.notSet")}
                 {idle !== null && idle > 60 && (
                   <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">
-                    · {idle} days ago
+                    · {t("common.daysAgo", idle)}
                   </span>
                 )}
               </Field>
-              <Field label="Alternative">{sub.reviewAlternative ?? "None noted"}</Field>
+              <Field label={t("form.alternative")}>
+                {sub.reviewAlternative ?? t("common.noneNoted")}
+              </Field>
             </div>
             {sub.reviewCancellationNotes && (
               <>
                 <Separator />
-                <Field label="Cancellation notes">{sub.reviewCancellationNotes}</Field>
+                <Field label={t("form.cancellationNotes")}>
+                  {sub.reviewCancellationNotes}
+                </Field>
               </>
             )}
           </CardContent>
@@ -288,9 +306,11 @@ export default function SubscriptionDetail() {
         {sub.cancelledAt && (
           <Card className="card-quiet border-dashed">
             <CardContent className="p-5 text-sm text-muted-foreground">
-              Cancelled on {formatDate(new Date(sub.cancelledAt).toISOString().slice(0, 10))}
-              {sub.cancelledReason ? ` — ${sub.cancelledReason}` : ""}. Its history is kept
-              in the cancellation record.
+              {t(
+                "detail.cancelledRecord",
+                formatDate(new Date(sub.cancelledAt).toISOString().slice(0, 10)),
+                sub.cancelledReason ?? "",
+              )}
             </CardContent>
           </Card>
         )}
@@ -307,22 +327,19 @@ export default function SubscriptionDetail() {
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Cancel {sub.name}?</DialogTitle>
-            <DialogDescription>
-              Nothing is deleted — it moves to your cancellation history with a
-              record of when and why. You can restore it later.
-            </DialogDescription>
+            <DialogTitle>{t("detail.cancelTitle", sub.name)}</DialogTitle>
+            <DialogDescription>{t("detail.cancelBody")}</DialogDescription>
           </DialogHeader>
           <Textarea
-            placeholder="Optional: why are you cancelling?"
+            placeholder={t("detail.cancelReasonPlaceholder")}
             value={cancelReason}
             onChange={(e) => setCancelReason(e.target.value)}
             rows={3}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelOpen(false)}>
-              Keep it
-            </Button>
+              {t("detail.keepIt")}
+              </Button>
             <Button
               variant="destructive"
               onClick={() =>
@@ -330,13 +347,13 @@ export default function SubscriptionDetail() {
                   id: sub._id,
                   reason: cancelReason.trim() || undefined,
                 }).then(() => {
-                  toast.success(`${sub.name} moved to cancellation history`);
+                  toast.success(t("subs.movedToHistory", sub.name));
                   setCancelOpen(false);
                   navigate("/subscriptions");
                 })
               }
             >
-              Cancel subscription
+              {t("detail.cancelSubscription")}
             </Button>
           </DialogFooter>
         </DialogContent>

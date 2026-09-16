@@ -11,12 +11,11 @@ import {
   CATEGORY_ICONS,
   CATEGORY_TINTS,
   daysUntil,
-  formatMoney,
   monthlyEquivalent,
-  rateFor,
   type RateTable,
   type Subscription,
 } from "@/lib/subs";
+import { useI18n } from "@/lib/i18n";
 import { useQuery } from "convex/react";
 import { ArrowUpRight, Plus, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -49,6 +48,7 @@ function Stat({
 
 export default function Dashboard() {
   const { isLoading } = useAuth();
+  const { t, formatDate, formatMoney, formatNumber } = useI18n();
   const subs = useQuery(api.subscriptions.list, { includeCancelled: false });
   const settings = useQuery(api.subscriptions.settings);
   const [formOpen, setFormOpen] = useState(false);
@@ -78,14 +78,20 @@ export default function Dashboard() {
   );
 
   const upcoming30 = useMemo(
-    () => active.filter((s) => daysUntil(s.nextBillingDate) <= 30 && daysUntil(s.nextBillingDate) >= 0),
+    () =>
+      active.filter((s) => {
+        const d = daysUntil(s.nextBillingDate);
+        return d >= 0 && d <= 30;
+      }),
     [active],
   );
 
   const top = useMemo(
     () =>
       [...active]
-        .sort((a, b) => monthlyEquivalent(b, rates, base) - monthlyEquivalent(a, rates, base))
+        .sort(
+          (a, b) => monthlyEquivalent(b, rates, base) - monthlyEquivalent(a, rates, base),
+        )
         .slice(0, 5),
     [active, rates, base],
   );
@@ -107,24 +113,24 @@ export default function Dashboard() {
     () =>
       active
         .map((s) => {
-          const reasons: string[] = [];
+          const reasons: { key: string; args?: unknown[] }[] = [];
           const monthly = monthlyEquivalent(s, rates, base);
           const usage = s.reviewUsageFrequency;
           const lastUsed = s.lastUsedAt
             ? new Date(s.lastUsedAt).toISOString().slice(0, 10)
             : s.reviewLastUsedDate;
-          if (usage === "Never") reasons.push("No recorded use");
+          if (usage === "Never") reasons.push({ key: "dash.noRecordedUse" });
           if (monthly > 15 && (usage === "Rarely" || usage === "Never")) {
-            reasons.push("Costly but rarely used");
+            reasons.push({ key: "dash.costlyRarelyUsed" });
           }
           if (lastUsed) {
             const daysIdle = Math.floor(
               (Date.now() - new Date(`${lastUsed}T00:00:00Z`).getTime()) / 86400000,
             );
-            if (daysIdle > 60) reasons.push(`Unused for ${daysIdle} days`);
+            if (daysIdle > 60) reasons.push({ key: "dash.unusedFor", args: [daysIdle] });
           }
           if (s.reviewAlternative && s.reviewPersonalValue === "Low") {
-            reasons.push(`Alternative: ${s.reviewAlternative}`);
+            reasons.push({ key: "dash.alternative", args: [s.reviewAlternative] });
           }
           if (s.reviewAlternative) {
             const dup = active.find(
@@ -132,7 +138,7 @@ export default function Dashboard() {
                 o._id !== s._id &&
                 o.name.toLowerCase() === s.reviewAlternative!.toLowerCase(),
             );
-            if (dup) reasons.push(`Overlaps with ${dup.name}`);
+            if (dup) reasons.push({ key: "dash.overlapsWith", args: [dup.name] });
           }
           return { sub: s, monthly, reasons };
         })
@@ -164,15 +170,14 @@ export default function Dashboard() {
       <div className="grid gap-5">
         <header className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{t("dash.title")}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {active.length} active subscription{active.length === 1 ? "" : "s"} ·
-              all amounts in {base}
+              {t("dash.activeCount", active.length)} · {t("dash.allAmountsIn", base)}
             </p>
           </div>
           <Button onClick={() => setFormOpen(true)} className="gap-1.5">
             <Plus className="size-4" />
-            Add
+            {t("common.add")}
           </Button>
         </header>
 
@@ -181,27 +186,26 @@ export default function Dashboard() {
           <Card className="card-quiet">
             <CardContent className="p-6">
               <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Monthly recurring
+                {t("dash.monthlyRecurring")}
               </p>
               <p className="mt-2 text-4xl font-semibold tracking-tight tabular-nums">
                 {formatMoney(monthlyTotal, base)}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                ≈ {formatMoney(monthlyTotal * 12, base)} a year
+                {t("dash.aYear", formatMoney(monthlyTotal * 12, base))}
               </p>
             </CardContent>
           </Card>
           <Card className="card-quiet">
             <CardContent className="p-6">
               <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Annual recurring
+                {t("dash.annualRecurring")}
               </p>
               <p className="mt-2 text-4xl font-semibold tracking-tight tabular-nums">
                 {formatMoney(monthlyTotal * 12, base)}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                {upcoming30.length} payment{upcoming30.length === 1 ? "" : "s"} due
-                in the next 30 days
+                {t("dash.paymentsDue", upcoming30.length)}
               </p>
             </CardContent>
           </Card>
@@ -211,38 +215,39 @@ export default function Dashboard() {
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="card-quiet lg:col-span-2">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Due in the next 7 days</CardTitle>
+              <CardTitle className="text-base">{t("dash.due7")}</CardTitle>
             </CardHeader>
             <CardContent>
               {upcoming7.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Nothing renews this week. Enjoy the quiet.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("dash.quietWeek")}</p>
               ) : (
                 <ul className="divide-y divide-border/70">
-                  {upcoming7.map((s) => (
-                    <li key={s._id} className="flex items-center justify-between py-2.5">
-                      <Link
-                        to={`/subscriptions/${s._id}`}
-                        className="flex items-center gap-2.5 text-sm font-medium hover:text-primary"
-                      >
-                        <span>{CATEGORY_ICONS[s.category]}</span>
-                        {s.name}
-                      </Link>
-                      <div className="text-right">
-                        <p className="text-sm font-medium tabular-nums">
-                          {formatMoney(s.price, s.currency)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {daysUntil(s.nextBillingDate) === 0
-                            ? "Today"
-                            : daysUntil(s.nextBillingDate) === 1
-                              ? "Tomorrow"
-                              : `In ${daysUntil(s.nextBillingDate)} days`}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
+                  {upcoming7.map((s) => {
+                    const d = daysUntil(s.nextBillingDate);
+                    return (
+                      <li key={s._id} className="flex items-center justify-between py-2.5">
+                        <Link
+                          to={`/subscriptions/${s._id}`}
+                          className="flex items-center gap-2.5 text-sm font-medium hover:text-primary"
+                        >
+                          <span>{CATEGORY_ICONS[s.category]}</span>
+                          {s.name}
+                        </Link>
+                        <div className="text-right">
+                          <p className="text-sm font-medium tabular-nums">
+                            {formatMoney(s.price, s.currency)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {d === 0
+                              ? t("common.today")
+                              : d === 1
+                                ? t("common.tomorrow")
+                                : t("common.inDays", d)}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </CardContent>
@@ -250,23 +255,34 @@ export default function Dashboard() {
 
           <div className="grid gap-4">
             <Stat
-              label="Next 30 days"
-              value={String(upcoming30.length)}
-              sub={`≈ ${formatMoney(
-                upcoming30.reduce(
-                  (a, s) =>
-                    a +
-                    (s.cycle === "monthly" ? s.price : s.price / 12) *
-                      rateFor(s.currency, rates, base, s.customRate),
-                  0,
+              label={t("dash.due30")}
+              value={formatNumber(upcoming30.length)}
+              sub={t(
+                "dash.chargesIn30",
+                formatMoney(
+                  upcoming30.reduce(
+                    (a, s) =>
+                      a +
+                      (s.cycle === "monthly" ? s.price : s.price / 12) *
+                        (s.currency === base
+                          ? 1
+                          : s.customRate && s.customRate > 0
+                            ? s.customRate
+                            : rates[s.currency] ?? 1),
+                    0,
+                  ),
+                  base,
                 ),
-                base,
-              )} in charges`}
+              )}
             />
             <Stat
-              label="Largest monthly"
-              value={top[0] ? formatMoney(monthlyEquivalent(top[0], rates, base), base) : "—"}
-              sub={top[0]?.name ?? "No subscriptions yet"}
+              label={t("dash.largestMonthly")}
+              value={
+                top[0]
+                  ? formatMoney(monthlyEquivalent(top[0], rates, base), base)
+                  : "—"
+              }
+              sub={top[0]?.name ?? t("dash.noSubsYet")}
             />
           </div>
         </div>
@@ -275,7 +291,7 @@ export default function Dashboard() {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="card-quiet">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Most expensive</CardTitle>
+              <CardTitle className="text-base">{t("dash.mostExpensive")}</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="grid gap-3">
@@ -291,7 +307,8 @@ export default function Dashboard() {
                           {s.name}
                         </Link>
                         <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {formatMoney(m, base)}/mo
+                          {formatMoney(m, base)}
+                          {t("common.perMonthShort")}
                         </span>
                       </div>
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -309,7 +326,7 @@ export default function Dashboard() {
 
           <Card className="card-quiet">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Spending by category</CardTitle>
+              <CardTitle className="text-base">{t("dash.byCategory")}</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="grid gap-3">
@@ -319,16 +336,17 @@ export default function Dashboard() {
                       <span className="flex items-center gap-2 font-medium">
                         <span
                           className={cn(
-                            "flex size-6 items-center justify-center rounded-md text-[13px]",
+                            "flex size-6 shrink-0 items-center justify-center rounded-md text-[13px]",
                             CATEGORY_TINTS[category],
                           )}
                         >
                           {CATEGORY_ICONS[category]}
                         </span>
-                        {category}
+                        {t(`cat.${category}`)}
                       </span>
                       <span className="tabular-nums text-muted-foreground">
-                        {formatMoney(monthly, base)}/mo
+                        {formatMoney(monthly, base)}
+                        {t("common.perMonthShort")}
                       </span>
                     </div>
                     <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -349,15 +367,12 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <TriangleAlert className="size-4 text-amber-500" />
-              Should I keep this?
+              {t("dash.keepTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {flagged.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nothing looks wasteful right now. Fill in the review fields on a
-                subscription to see suggestions here.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("dash.keepEmpty")}</p>
             ) : (
               <ul className="divide-y divide-border/70">
                 {flagged.map(({ sub, monthly, reasons }) => (
@@ -368,22 +383,23 @@ export default function Dashboard() {
                         className="flex items-center gap-2 text-sm font-medium hover:text-primary"
                       >
                         {sub.name}
-                        <ArrowUpRight className="size-3.5 text-muted-foreground" />
+                        <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
                       </Link>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {reasons.map((r) => (
                           <Badge
-                            key={r}
+                            key={r.key + JSON.stringify(r.args ?? "")}
                             variant="secondary"
                             className="font-normal text-muted-foreground"
                           >
-                            {r}
+                            {t(r.key, ...(r.args ?? []))}
                           </Badge>
                         ))}
                       </div>
                     </div>
                     <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                      {formatMoney(monthly, base)}/mo
+                      {formatMoney(monthly, base)}
+                      {t("common.perMonthShort")}
                     </span>
                   </li>
                 ))}

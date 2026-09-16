@@ -7,14 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
-import {
-  CURRENCIES,
-  daysSince,
-  formatDate,
-  formatMoney,
-  monthlyEquivalent,
-  type RateTable,
-} from "@/lib/subs";
+import { CURRENCIES, monthlyEquivalent, type RateTable } from "@/lib/subs";
+import { LanguageToggle, useI18n } from "@/lib/i18n";
 import { useMutation, useQuery } from "convex/react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -24,6 +18,7 @@ import { toast } from "sonner";
 export default function Manage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { t, formatDate, formatMoney } = useI18n();
   const subs = useQuery(api.subscriptions.list, { includeCancelled: true });
   const settings = useQuery(api.subscriptions.settings);
   const setRates = useMutation(api.subscriptions.setRates);
@@ -72,9 +67,9 @@ export default function Manage() {
         if (raw.trim() !== "" && Number.isFinite(n) && n > 0) parsed[code] = n;
       }
       await setRates(parsed as never);
-      toast.success("Exchange rates saved");
+      toast.success(t("manage.ratesSaved"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save rates");
+      toast.error(err instanceof Error ? err.message : t("manage.rateError"));
     } finally {
       setSaving(false);
     }
@@ -83,37 +78,33 @@ export default function Manage() {
   return (
     <AppShell>
       <div className="grid gap-5">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight">Manage</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Exchange rates, cancellation history, and account settings.
-          </p>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{t("manage.title")}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{t("manage.subtitle")}</p>
+          </div>
+          <LanguageToggle className="md:hidden" />
         </header>
 
         {/* Exchange rates */}
         <Card className="card-quiet">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Default exchange rates</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              How much 1 unit of each currency is worth in your home currency
-              ({base}). You can also set a rate on an individual subscription.
-            </p>
+            <CardTitle className="text-base">{t("manage.ratesTitle")}</CardTitle>
+            <p className="text-sm text-muted-foreground">{t("manage.ratesBody", base)}</p>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {CURRENCIES.filter((c) => c !== base).map((c) => (
                 <div key={c} className="grid gap-1.5">
                   <Label htmlFor={`rate-${c}`} className="text-xs">
-                    1 {c} =
+                    {t("manage.perUnit", c)}
                   </Label>
                   <Input
                     id={`rate-${c}`}
                     inputMode="decimal"
-                    placeholder={`${base}`}
+                    placeholder={base}
                     value={draft[c] ?? ""}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, [c]: e.target.value }))
-                    }
+                    onChange={(e) => setDraft((d) => ({ ...d, [c]: e.target.value }))}
                   />
                 </div>
               ))}
@@ -125,7 +116,7 @@ export default function Manage() {
                 ) : (
                   <RefreshCw className="size-4" />
                 )}
-                Save rates
+                {t("manage.saveRates")}
               </Button>
             </div>
           </CardContent>
@@ -134,37 +125,34 @@ export default function Manage() {
         {/* Cancellation history */}
         <Card className="card-quiet">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Cancellation history</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Cancelled subscriptions are never deleted — they're kept here with
-              their full record.
-            </p>
+            <CardTitle className="text-base">{t("manage.historyTitle")}</CardTitle>
+            <p className="text-sm text-muted-foreground">{t("manage.historyBody")}</p>
           </CardHeader>
           <CardContent>
             {history.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nothing cancelled yet. When you cancel a subscription it will
-                appear here.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("manage.historyEmpty")}</p>
             ) : (
               <ul className="divide-y divide-border/70">
                 {history.map((s) => (
-                  <li key={s._id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                  <li
+                    key={s._id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-3"
+                  >
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{s.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        Cancelled{" "}
-                        {formatDate(
-                          new Date(s.cancelledAt!).toISOString().slice(0, 10),
+                        {t(
+                          "common.cancelledOn",
+                          formatDate(new Date(s.cancelledAt!).toISOString().slice(0, 10)),
                         )}
                         {s.cancelledReason ? ` · ${s.cancelledReason}` : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-sm tabular-nums text-muted-foreground">
-                        was {formatMoney(monthlyEquivalent(s, rates, base), base)}/mo
+                        {t("common.wasPerMonth", formatMoney(monthlyEquivalent(s, rates, base), base))}
                       </span>
-                      <Badge variant="outline">{s.category}</Badge>
+                      <Badge variant="outline">{t(`cat.${s.category}`)}</Badge>
                     </div>
                   </li>
                 ))}
@@ -176,41 +164,38 @@ export default function Manage() {
         {/* Account */}
         <Card className="card-quiet">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Account</CardTitle>
+            <CardTitle className="text-base">{t("manage.account")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">
-                  {user?.name || user?.email || "Signed in"}
+                  {user?.name || user?.email || t("manage.signedIn")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {user?.email ?? "Anonymous guest session"}
+                  {user?.email ?? t("manage.anonymous")}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    resetDemo().then(() => toast.success("Sample data restored"))
+                    resetDemo().then(() => toast.success(t("manage.sampleRestored")))
                   }
                 >
-                  Restore sample data
+                  {t("manage.restoreSample")}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => signOut().then(() => navigate("/"))}
                 >
-                  Sign out
+                  {t("nav.signOut")}
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Restoring sample data replaces your current list with the starter
-              AI, cloud storage, mobile, and streaming examples.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("manage.sampleNote")}</p>
           </CardContent>
         </Card>
       </div>

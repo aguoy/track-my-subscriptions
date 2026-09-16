@@ -18,12 +18,11 @@ import {
   CATEGORY_ICONS,
   CATEGORY_TINTS,
   daysUntil,
-  formatDate,
-  formatMoney,
   monthlyEquivalent,
   type RateTable,
   type Subscription,
 } from "@/lib/subs";
+import { useI18n } from "@/lib/i18n";
 import { useMutation, useQuery } from "convex/react";
 import {
   Archive,
@@ -40,14 +39,15 @@ import { cn } from "@/lib/utils";
 
 type SortKey = "name" | "price-desc" | "price-asc" | "next";
 
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: "name", label: "Name A–Z" },
-  { key: "price-desc", label: "Most expensive first" },
-  { key: "price-asc", label: "Least expensive first" },
-  { key: "next", label: "Next billing date" },
+const SORT_KEYS: { key: SortKey; labelKey: string }[] = [
+  { key: "name", labelKey: "subs.sortName" },
+  { key: "price-desc", labelKey: "subs.sortPriceDesc" },
+  { key: "price-asc", labelKey: "subs.sortPriceAsc" },
+  { key: "next", labelKey: "subs.sortNext" },
 ];
 
 export default function Subscriptions() {
+  const { t, formatDate, formatMoney } = useI18n();
   const subs = useQuery(api.subscriptions.list, { includeCancelled: true });
   const settings = useQuery(api.subscriptions.settings);
   const cancelSub = useMutation(api.subscriptions.cancel);
@@ -111,9 +111,9 @@ export default function Subscriptions() {
       <div className="grid gap-5">
         <header className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Subscriptions</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{t("subs.title")}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {filtered.length} shown · all amounts in {base}
+              {t("subs.shown", filtered.length)} · {t("dash.allAmountsIn", base)}
             </p>
           </div>
           <Button
@@ -124,7 +124,7 @@ export default function Subscriptions() {
             className="gap-1.5"
           >
             <Plus className="size-4" />
-            Add
+            {t("common.add")}
           </Button>
         </header>
 
@@ -136,20 +136,20 @@ export default function Subscriptions() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by name, payment method, or notes…"
+                placeholder={t("subs.searchPlaceholder")}
                 className="pl-9"
               />
             </div>
             <div className="flex items-center gap-2">
               <select
-                aria-label="Sort subscriptions"
+                aria-label={t("common.sort")}
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}
                 className="h-9 rounded-md border border-input bg-card px-2.5 text-sm text-foreground outline-none"
               >
-                {SORTS.map((s) => (
+                {SORT_KEYS.map((s) => (
                   <option key={s.key} value={s.key}>
-                    {s.label}
+                    {t(s.labelKey)}
                   </option>
                 ))}
               </select>
@@ -157,7 +157,18 @@ export default function Subscriptions() {
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            {["All", ...CATEGORIES].map((c) => (
+            <button
+              onClick={() => setCategory("All")}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                category === "All"
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t("common.all")}
+            </button>
+            {CATEGORIES.map((c) => (
               <button
                 key={c}
                 onClick={() => setCategory(c)}
@@ -168,7 +179,7 @@ export default function Subscriptions() {
                     : "border-border bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
-                {c}
+                {t(`cat.${c}`)}
               </button>
             ))}
             {cancelledCount > 0 && (
@@ -181,7 +192,7 @@ export default function Subscriptions() {
                     : "border-border bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
-                Cancelled ({cancelledCount})
+                {t("subs.cancelledWithCount", cancelledCount)}
               </button>
             )}
           </div>
@@ -191,11 +202,11 @@ export default function Subscriptions() {
         {filtered.length === 0 ? (
           <Card className="card-quiet">
             <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-              <p className="text-sm font-medium">No subscriptions found</p>
+              <p className="text-sm font-medium">{t("subs.noneFound")}</p>
               <p className="max-w-sm text-sm text-muted-foreground">
                 {query || category !== "All"
-                  ? "Try a different search or category."
-                  : "Add your first subscription to start tracking your recurring spend."}
+                  ? t("subs.tryDifferent")
+                  : t("subs.addFirst")}
               </p>
             </CardContent>
           </Card>
@@ -222,43 +233,54 @@ export default function Subscriptions() {
                         {CATEGORY_ICONS[s.category]}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <Link
                             to={`/subscriptions/${s._id}`}
                             className="truncate text-sm font-semibold hover:text-primary"
                           >
                             {s.name}
                           </Link>
-                          {s.cancelledAt && <Badge variant="outline">Cancelled</Badge>}
+                          {s.cancelledAt && (
+                            <Badge variant="outline">{t("common.cancelled")}</Badge>
+                          )}
                           {!s.autoRenew && !s.cancelledAt && (
-                            <Badge variant="secondary">No auto-renew</Badge>
+                            <Badge variant="secondary">{t("subs.noAutoRenew")}</Badge>
                           )}
                         </div>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {formatMoney(s.price, s.currency)} per {s.cycle === "monthly" ? "month" : "year"}
+                          {formatMoney(s.price, s.currency)}
+                          {" / "}
+                          {t(s.cycle === "monthly" ? "common.month" : "common.year")}
                           {" · "}
                           {s.cancelledAt
-                            ? `Cancelled ${formatDate(new Date(s.cancelledAt).toISOString().slice(0, 10))}`
+                            ? t(
+                                "common.cancelledOn",
+                                formatDate(
+                                  new Date(s.cancelledAt).toISOString().slice(0, 10),
+                                ),
+                              )
                             : due === 0
-                              ? "Renews today"
+                              ? t("common.renewsToday")
                               : due === 1
-                                ? "Renews tomorrow"
+                                ? t("common.renewsTomorrow")
                                 : due > 1
-                                  ? `Renews ${formatDate(s.nextBillingDate)}`
-                                  : "Renewal date passed"}
+                                  ? t("common.renewsOn", formatDate(s.nextBillingDate))
+                                  : t("common.renewalPassed")}
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-sm font-semibold tabular-nums">
                           {formatMoney(m, base)}
                         </p>
-                        <p className="text-xs text-muted-foreground">per month</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t("common.perMonthShort")}
+                        </p>
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="size-8 shrink-0">
                             <MoreHorizontal className="size-4" />
-                            <span className="sr-only">Actions</span>
+                            <span className="sr-only">{t("subs.actions")}</span>
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -269,18 +291,18 @@ export default function Subscriptions() {
                             }}
                           >
                             <Pencil className="size-4" />
-                            Edit
+                            {t("common.edit")}
                           </DropdownMenuItem>
                           {!s.cancelledAt && (
                             <DropdownMenuItem
                               onClick={() =>
                                 markUsed({ id: s._id }).then(() =>
-                                  toast.success(`Marked ${s.name} as used today`),
+                                  toast.success(t("subs.markedUsed", s.name)),
                                 )
                               }
                             >
                               <Archive className="size-4" />
-                              Mark as used today
+                              {t("subs.markUsed")}
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
@@ -288,23 +310,23 @@ export default function Subscriptions() {
                             <DropdownMenuItem
                               onClick={() =>
                                 restoreSub({ id: s._id }).then(() =>
-                                  toast.success(`${s.name} restored`),
+                                  toast.success(t("subs.restored", s.name)),
                                 )
                               }
                             >
                               <ArchiveRestore className="size-4" />
-                              Restore
+                              {t("subs.restore")}
                             </DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem
                               onClick={() =>
                                 cancelSub({ id: s._id }).then(() =>
-                                  toast.success(`${s.name} moved to cancellation history`),
+                                  toast.success(t("subs.movedToHistory", s.name)),
                                 )
                               }
                             >
                               <Archive className="size-4" />
-                              Cancel
+                              {t("common.cancel")}
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>

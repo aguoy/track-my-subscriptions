@@ -21,13 +21,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/convex/_generated/api";
 import type { Subscription } from "@/lib/subs";
-import {
-  CATEGORIES,
-  CURRENCIES,
-  monthlyEquivalent,
-  todayStr,
-  type RateTable,
-} from "@/lib/subs";
+import { CATEGORIES, CURRENCIES, todayStr, type RateTable } from "@/lib/subs";
+import { useI18n } from "@/lib/i18n";
 import { useMutation } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -123,6 +118,7 @@ export default function SubscriptionFormDialog({
   rates: RateTable | undefined;
   baseCurrency: string;
 }) {
+  const { t, formatNumber } = useI18n();
   const [form, setForm] = useState<FormState>(blankForm);
   const [saving, setSaving] = useState(false);
 
@@ -140,12 +136,9 @@ export default function SubscriptionFormDialog({
     const price = Number(form.price);
     if (!Number.isFinite(price) || price <= 0) return null;
     const custom = form.customRate ? Number(form.customRate) : undefined;
-    const monthly =
-      form.cycle === "monthly" ? price : price / 12;
+    const monthly = form.cycle === "monthly" ? price : price / 12;
     const rate =
-      form.currency === baseCurrency
-        ? 1
-        : custom ?? rates?.[form.currency] ?? 1;
+      form.currency === baseCurrency ? 1 : custom ?? rates?.[form.currency] ?? 1;
     return { monthly: monthly * rate, annual: monthly * rate * 12 };
   }, [form.price, form.cycle, form.currency, form.customRate, rates, baseCurrency]);
 
@@ -180,40 +173,40 @@ export default function SubscriptionFormDialog({
     try {
       if (initial) {
         await update({ id: initial._id, ...payload });
-        toast.success("Subscription updated");
+        toast.success(t("form.updated"));
       } else {
         await create(payload);
-        toast.success(`${payload.name} added`);
+        toast.success(t("form.added", payload.name));
       }
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(err instanceof Error ? err.message : t("form.somethingWrong"));
     } finally {
       setSaving(false);
     }
   };
+
+  const defaultRate = rates?.[form.currency];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {initial ? "Edit subscription" : "Add subscription"}
+            {initial ? t("form.editTitle") : t("form.addTitle")}
           </DialogTitle>
           <DialogDescription>
-            {initial
-              ? "Update the details, billing, or review notes for this service."
-              : "Track a recurring service so nothing sneaks up on you."}
+            {initial ? t("form.editDesc") : t("form.addDesc")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           {/* --- Details --- */}
           <div className="grid gap-2">
-            <Label htmlFor="sub-name">Service name</Label>
+            <Label htmlFor="sub-name">{t("form.serviceName")}</Label>
             <Input
               id="sub-name"
-              placeholder="e.g. Netflix"
+              placeholder={t("form.namePlaceholder")}
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
               autoFocus
@@ -221,18 +214,15 @@ export default function SubscriptionFormDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label>Category</Label>
-            <Select
-              value={form.category}
-              onValueChange={(v) => set("category", v)}
-            >
+            <Label>{t("form.category")}</Label>
+            <Select value={form.category} onValueChange={(v) => set("category", v)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {CATEGORIES.map((c) => (
                   <SelectItem key={c} value={c}>
-                    {c}
+                    {t(`cat.${c}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -241,7 +231,7 @@ export default function SubscriptionFormDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="sub-price">Price</Label>
+              <Label htmlFor="sub-price">{t("form.price")}</Label>
               <Input
                 id="sub-price"
                 inputMode="decimal"
@@ -251,11 +241,8 @@ export default function SubscriptionFormDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label>Currency</Label>
-              <Select
-                value={form.currency}
-                onValueChange={(v) => set("currency", v)}
-              >
+              <Label>{t("form.currency")}</Label>
+              <Select value={form.currency} onValueChange={(v) => set("currency", v)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -272,7 +259,7 @@ export default function SubscriptionFormDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label>Price is per</Label>
+              <Label>{t("form.priceIsPer")}</Label>
               <Select
                 value={form.cycle}
                 onValueChange={(v) => set("cycle", v as "monthly" | "annual")}
@@ -281,25 +268,23 @@ export default function SubscriptionFormDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="monthly">Month</SelectItem>
-                  <SelectItem value="annual">Year</SelectItem>
+                  <SelectItem value="monthly">{t("cycle.monthly")}</SelectItem>
+                  <SelectItem value="annual">{t("cycle.annual")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Bills every</Label>
+              <Label>{t("form.billsEvery")}</Label>
               <Select
                 value={form.billingCycle}
-                onValueChange={(v) =>
-                  set("billingCycle", v as "monthly" | "annual")
-                }
+                onValueChange={(v) => set("billingCycle", v as "monthly" | "annual")}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="monthly">Month</SelectItem>
-                  <SelectItem value="annual">Year</SelectItem>
+                  <SelectItem value="monthly">{t("cycle.monthly")}</SelectItem>
+                  <SelectItem value="annual">{t("cycle.annual")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -307,7 +292,7 @@ export default function SubscriptionFormDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="sub-start">Start date</Label>
+              <Label htmlFor="sub-start">{t("form.startDate")}</Label>
               <Input
                 id="sub-start"
                 type="date"
@@ -316,7 +301,7 @@ export default function SubscriptionFormDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="sub-next">Next billing date</Label>
+              <Label htmlFor="sub-next">{t("form.nextBillingDate")}</Label>
               <Input
                 id="sub-next"
                 type="date"
@@ -327,10 +312,10 @@ export default function SubscriptionFormDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="sub-payment">Payment method</Label>
+            <Label htmlFor="sub-payment">{t("form.paymentMethod")}</Label>
             <Input
               id="sub-payment"
-              placeholder="e.g. Visa •• 4417"
+              placeholder={t("form.paymentPlaceholder")}
               value={form.paymentMethod}
               onChange={(e) => set("paymentMethod", e.target.value)}
             />
@@ -338,7 +323,7 @@ export default function SubscriptionFormDialog({
 
           <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2.5">
             <Label htmlFor="sub-autorenew" className="cursor-pointer">
-              Auto renewal
+              {t("form.autoRenewal")}
             </Label>
             <Switch
               id="sub-autorenew"
@@ -350,37 +335,38 @@ export default function SubscriptionFormDialog({
           {form.currency !== baseCurrency && (
             <div className="grid gap-2">
               <Label htmlFor="sub-rate">
-                Exchange rate <span className="text-muted-foreground">(optional)</span>
+                {t("form.exchangeRate")}{" "}
+                <span className="text-muted-foreground">({t("common.optional")})</span>
               </Label>
               <Input
                 id="sub-rate"
                 inputMode="decimal"
-                placeholder={`1 ${form.currency} = ? ${baseCurrency}`}
+                placeholder={t("form.ratePlaceholder", form.currency)}
                 value={form.customRate}
                 onChange={(e) => set("customRate", e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Leave blank to use your default rate of{" "}
-                {rates?.[form.currency] ?? "—"} {baseCurrency} per{" "}
-                {form.currency}.
+                {typeof defaultRate === "number" && defaultRate > 0
+                  ? t("form.rateHelp", baseCurrency, form.currency, formatNumber(defaultRate))
+                  : t("form.rateHelpNoDefault", baseCurrency, form.currency)}
               </p>
             </div>
           )}
 
           {preview && (
             <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">
-              ≈ <span className="font-semibold">{preview.monthly.toFixed(2)}</span>{" "}
-              {baseCurrency}/month ·{" "}
-              <span className="font-semibold">{preview.annual.toFixed(2)}</span>{" "}
-              {baseCurrency}/year
+              {t("form.previewMonthly", formatNumber(preview.monthly, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}{" "}
+              ·{" "}
+              {t("form.previewAnnual", formatNumber(preview.annual, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}{" "}
+              {baseCurrency}
             </p>
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="sub-notes">Notes</Label>
+            <Label htmlFor="sub-notes">{t("form.notes")}</Label>
             <Textarea
               id="sub-notes"
-              placeholder="Anything worth remembering about this one."
+              placeholder={t("form.notesPlaceholder")}
               value={form.notes}
               onChange={(e) => set("notes", e.target.value)}
               rows={2}
@@ -391,45 +377,42 @@ export default function SubscriptionFormDialog({
 
           {/* --- Should I keep this? --- */}
           <div>
-            <p className="text-sm font-semibold">Should I keep this?</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Optional — helps spot the ones that have quietly outstayed their
-              welcome.
-            </p>
+            <p className="text-sm font-semibold">{t("form.reviewTitle")}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t("form.reviewDesc")}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label>How often used</Label>
+              <Label>{t("form.howOftenUsed")}</Label>
               <Select
                 value={form.reviewUsageFrequency || undefined}
                 onValueChange={(v) => set("reviewUsageFrequency", v)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Not set" />
+                  <SelectValue placeholder={t("common.notSet")} />
                 </SelectTrigger>
                 <SelectContent>
                   {["Daily", "Weekly", "Monthly", "Rarely", "Never"].map((u) => (
                     <SelectItem key={u} value={u}>
-                      {u}
+                      {t(`usage.${u}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Personal value</Label>
+              <Label>{t("form.personalValue")}</Label>
               <Select
                 value={form.reviewPersonalValue || undefined}
                 onValueChange={(v) => set("reviewPersonalValue", v)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Not set" />
+                  <SelectValue placeholder={t("common.notSet")} />
                 </SelectTrigger>
                 <SelectContent>
                   {["High", "Medium", "Low"].map((v) => (
                     <SelectItem key={v} value={v}>
-                      {v}
+                      {t(`value.${v}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -438,7 +421,7 @@ export default function SubscriptionFormDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="sub-lastused">Last used date</Label>
+            <Label htmlFor="sub-lastused">{t("form.lastUsedDate")}</Label>
             <Input
               id="sub-lastused"
               type="date"
@@ -448,20 +431,20 @@ export default function SubscriptionFormDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="sub-alt">Alternative available</Label>
+            <Label htmlFor="sub-alt">{t("form.alternative")}</Label>
             <Input
               id="sub-alt"
-              placeholder="e.g. Google One covers this"
+              placeholder={t("form.alternativePlaceholder")}
               value={form.reviewAlternative}
               onChange={(e) => set("reviewAlternative", e.target.value)}
             />
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="sub-cancel-notes">Cancellation notes</Label>
+            <Label htmlFor="sub-cancel-notes">{t("form.cancellationNotes")}</Label>
             <Textarea
               id="sub-cancel-notes"
-              placeholder="What would make you cancel, or what you'd need to check first."
+              placeholder={t("form.cancellationNotesPlaceholder")}
               value={form.reviewCancellationNotes}
               onChange={(e) => set("reviewCancellationNotes", e.target.value)}
               rows={2}
@@ -470,16 +453,12 @@ export default function SubscriptionFormDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
-            Cancel
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={!canSave || saving}>
             {saving && <Loader2 className="size-4 animate-spin" />}
-            {initial ? "Save changes" : "Add subscription"}
+            {initial ? t("form.saveChanges") : t("form.addSubscription")}
           </Button>
         </DialogFooter>
       </DialogContent>
